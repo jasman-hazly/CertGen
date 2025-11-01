@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate Generator</title>
+    <!-- 1. Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 2. Use Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        /* 3. Custom styles for the app and printing */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .font-fancy {
+            font-family: 'Playfair Display', serif;
+        }
+
+        /* This is the A4-sized certificate container */
+        .certificate {
+            /* On-screen preview styling */
+            width: 100%;
+            /* A4 Aspect Ratio: 210 / 297 = 0.707 */
+            aspect-ratio: 210 / 297;
+            /* max-width: 600px; */ /* Removed to allow flex layout */
+            max-width: 100%; /* Fill its container */
+            margin: 0 auto; /* Centered in its container */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden; /* Ensure content fits */
+
+            /* New styles for background image */
+            position: relative;
+            background-size: 100% 100%; /* Stretch-fit the background */
+            background-repeat: no-repeat;
+            
+            /* Remove old borders */
+            border: 1px solid #ccc; /* Add a faint border for preview */
+        }
+        
+        /* New class for the text blocks */
+        .text-block {
+            position: absolute;
+            width: 90%;
+            left: 5%; /* Center horizontally */
+            text-align: center;
+            transition: top 0.1s, opacity 0.1s;
+            /* width/top/left will be set by JS */
+            height: auto; /* Maintain aspect ratio */
+            transition: top 0.1s, left 0.1s, width 0.1s;
+        }
+        
+        .name-block {
+            /* font-family: 'Playfair Display', serif; */ /* Removed, will be set by JS */
+            /* font-size: 3.5rem; */ /* Removed, will be set by JS */
+            font-weight: 700;
+            color: #000000; /* CHANGED: Set to black */
+        }
+        
+        /* NEW IC Block Style */
+        .ic-block {
+            /* font-size: 1.25rem; */ /* Removed, will be set by JS */
+            font-weight: 500;
+            color: #4b5563; /* gray-600 */
+        }
+        
+        /* NEW: Reason Block Style */
+        .reason-block {
+            font-weight: 500;
+            color: #374151; /* gray-700 */
+        }
+        
+        .event-block {
+            /* font-size: 1.5rem; */ /* Removed, will be set by JS */
+            font-weight: 600;
+            color: #000000; /* CHANGED: Set to black */
+        }
+        
+        /* NEW: Certificate Type Block Style */
+        .cert-type-block {
+            font-weight: 600;
+            color: #000000; /* Black */
+        }
+        
+        /* NEW: Signer Block Style */
+        .signer-block {
+            font-weight: 500;
+            color: #374151; /* gray-700 */
+            /* Default alignment (center) */
+            text-align: center; 
+        }
+        
+        /* NEW: Adds a signature line above the signer's name */
+        .signer-block::before {
+            content: '';
+            display: block;
+            width: 100%; /* CHANGED: Was 40%, now 100% of the block's width */
+            margin: 0 auto 6px auto; /* Centered */
+            border-top: 1.5px dotted #555;
+        }
+        
+        /* REMOVED: Signer Alignment Classes */
+        /* .signer-block.signer-align-left ... */
+        /* .signer-block.signer-align-right ... */
+
+        /* NEW: Class for the logo image */
+        .logo-image {
+            position: absolute;
+            height: auto; /* Maintain aspect ratio */
+            transition: top 0.1s, left 0.1s, width 0.1s;
+        }
+        
+        @media print {
+            /* Hide all non-certificate elements */
+            .certificate {
+                width: 210mm;
+                height: 297mm;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+                border: none; /* No border for printing */
+                page-break-after: always;
+                overflow: hidden;
+            }
+
+            /* Hides the background image by default when printing */
+            body:not(.printing-with-bg) .certificate {
+                background-image: none !important;
+            }
+            
+            /* Ensure text colors print correctly */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            
+            /* Adjust font sizes for A4 printing */
+            /* Removed fixed font sizes, as they are now set via inline styles */
+            /*
+            .name-block {
+                font-size: 48pt;
+            }
+            .ic-block {
+                font-size: 18pt;
+            }
+            .event-block {
+                font-size: 24pt;
+            }
+            */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8 flex flex-col items-center">
+
+    <!-- == App Title == -->
+    <div class="text-center mb-8 print-hide">
+        <h1 class="text-3xl sm:text-4xl font-bold text-gray-800">Certificate Generator</h1>
+        <p class="text-gray-600 mt-2">Upload a CSV, add a background, align, and print.</p>
+    </div>
+
+    <!-- == Input Card == -->
+    <div id="input-card" class="w-full max-w-lg bg-white p-6 sm:p-8 rounded-2xl shadow-lg print-hide">
+        <form id="certificate-form">
+            <!-- Event Name Input -->
+            <div class="mb-5">
+                <label for="event-name" class="block text-sm font-medium text-gray-700 mb-2">Event Name</label>
+                <input type="text" id="event-name" name="event-name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" placeholder="e.g., 'Annual Tech Conference 2025'" required>
+            </div>
+            
+            <!-- UPDATED: Certificate Type Input -->
+            <div class="mb-5">
+                <label for="cert-type" class="block text-sm font-medium text-gray-700 mb-2">Type of Certificate</label>
+                <select id="cert-type" name="cert-type" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition bg-white">
+                    <option value="Sijil Penghargaan">Sijil Penghargaan</option>
+                    <option value="Sijil Penyertaan">Sijil Penyertaan</option>
+                </select>
+            </div>
+            
+            <!-- UPDATED: Signer Name Input -->
+            <div class="mb-5">
+                <label for="signer-name" class="block text-sm font-medium text-gray-700 mb-2">Signer's Name</label>
+                <input type="text" id="signer-name" name="signer-name" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" placeholder="e.g., 'Dr. Jane Doe'">
+            </div>
+            
+            <!-- NEW: Signer Title Input -->
+            <div class="mb-5">
+                <label for="signer-title" class="block text-sm font-medium text-gray-700 mb-2">Signer's Title</label>
+                <input type="text" id="signer-title" name="signer-title" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" placeholder="e.g., 'Event Director'">
+            </div>
+            
+            <!-- NEW: Reason Input -->
+            <div class="mb-5">
+                <label for="reason-text" class="block text-sm font-medium text-gray-700 mb-2">Reason for Certificate (Optional)</label>
+                <textarea id="reason-text" name="reason-text" rows="3" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" placeholder="e.g., 'telah menyertai dengan jayanya...'"></textarea>
+            </div>
+            
+            <!-- CSV File Input -->
+            <div class="mb-5">
+                <label for="csv-file" class="block text-sm font-medium text-gray-700 mb-2">Upload Name List (.csv)</label>
+                <input type="file" id="csv-file" name="csv-file" accept=".csv" class="w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-5 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required>
+                <p class="text-xs text-gray-500 mt-2">
+                    <strong>Note:</strong> First column = names, Second column = IC Number. First row (header) will be skipped.
+                </p>
+            </div>
+            
+            <!-- NEW: Background Image Input -->
+            <div class="mb-5">
+                <label for="bg-image" class="block text-sm font-medium text-gray-700 mb-2">Certificate Background Image (Optional)</label>
+                <input type="file" id="bg-image" name="bg-image" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-5 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100">
+            </div>
+            
+            <!-- NEW: Logo Image Input -->
+            <div class="mb-5">
+                <label for="logo-image" class="block text-sm font-medium text-gray-700 mb-2">Logo Image (Optional)</label>
+                <input type="file" id="logo-image" name="logo-image" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-5 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100">
+            </div>
+            
+            <!-- Generate Button -->
+            <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Generate Certificates
+            </button>
+        </form>
+        
+        <!-- Message Area -->
+        <div id="message-area" class="mt-4"></div>
+    </div>
+    
+    <!-- == NEW: Main Content Wrapper (Controls + Preview) == -->
+    <div id="main-content" class="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-8 mt-8" style="display: none;">
+
+        <!-- == Controls Area (Now on the left) == -->
+        <div id="controls-area" class="w-full lg:w-2/5 bg-white p-6 sm:p-8 rounded-2xl shadow-lg print-hide">
+            <h3 class="text-xl font-semibold text-gray-800 mb-6 text-center">Alignment & Style Controls</h3>
+            
+            <!-- Logo Controls -->
+            <details class="border-t border-gray-200 pt-4" open>
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">Logo</summary>
+                <div class="mb-4">
+                    <label for="logo-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="logo-top" min="0" max="100" value="8" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="logo-top-value">8</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="logo-left" class="block text-sm font-medium text-gray-700">Position (Left %)</label>
+                    <input type="range" id="logo-left" min="0" max="100" value="40" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="logo-left-value">40</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="logo-size" class="block text-sm font-medium text-gray-700">Width (%)</label>
+                    <input type="range" id="logo-size" min="5" max="50" value="20" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="logo-size-value">20</span>%</span>
+                </div>
+            </details>
+
+            <!-- NEW: Certificate Type Controls -->
+            <details class="border-t border-gray-200 pt-4 mt-6">
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">Certificate Type</summary>
+                <div class="mb-4">
+                    <label for="cert-type-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="cert-type-top" min="0" max="100" value="25" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="cert-type-top-value">25</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="cert-type-size" class="block text-sm font-medium text-gray-700">Font Size (pt)</label>
+                    <input type="range" id="cert-type-size" min="12" max="48" value="28" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="cert-type-size-value">28</span>pt</span>
+                </div>
+                <div class="mb-4">
+                    <label for="cert-type-font" class="block text-sm font-medium text-gray-700">Font Family</label>
+                    <select id="cert-type-font" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="Playfair Display">Playfair Display (Serif)</option>
+                        <option value="Inter">Inter (Sans-Serif)</option>
+                        <option value="Times New Roman">Times New Roman (Serif)</option>
+                        <option value="Arial">Arial (Sans-Serif)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                    </select>
+                </div>
+                <!-- REMOVED: Signer left/width controls were here by mistake -->
+            </details>
+
+            <!-- NEW: Participant Name Controls (Re-added) -->
+            <details class="border-t border-gray-200 pt-4 mt-6">
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">Participant Name</summary>
+                <div class="mb-4">
+                    <label for="name-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="name-top" min="0" max="100" value="35" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="name-top-value">35</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="name-size" class="block text-sm font-medium text-gray-700">Font Size (pt)</label>
+                    <input type="range" id="name-size" min="20" max="72" value="48" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="name-size-value">48</span>pt</span>
+                </div>
+                <div class="mb-4">
+                    <label for="name-font" class="block text-sm font-medium text-gray-700">Font Family</label>
+                    <select id="name-font" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="Playfair Display">Playfair Display (Serif)</option>
+                        <option value="Inter">Inter (Sans-Serif)</option>
+                        <option value="Times New Roman">Times New Roman (Serif)</option>
+                        <option value="Arial">Arial (Sans-Serif)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                    </select>
+                </div>
+            </details>
+
+            <!-- NEW: IC Number Controls (Re-added) -->
+            <details class="border-t border-gray-200 pt-4 mt-6">
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">IC Number</summary>
+                <div class="mb-4">
+                    <label for="ic-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="ic-top" min="0" max="100" value="45" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="ic-top-value">45</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="ic-size" class="block text-sm font-medium text-gray-700">Font Size (pt)</label>
+                    <input type="range" id="ic-size" min="10" max="36" value="18" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="ic-size-value">18</span>pt</span>
+                </div>
+                <div class="mb-4">
+                    <label for="ic-font" class="block text-sm font-medium text-gray-700">Font Family</label>
+                    <select id="ic-font" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="Inter">Inter (Sans-Serif)</option>
+                        <option value="Playfair Display">Playfair Display (Serif)</option>
+                        <option value="Times New Roman">Times New Roman (Serif)</option>
+                        <option value="Arial">Arial (Sans-Serif)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                    </select>
+                </div>
+            </details>
+
+            <!-- NEW: Reason Controls (Re-added) -->
+            <details class="border-t border-gray-200 pt-4 mt-6">
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">Reason</summary>
+                <div class="mb-4">
+                    <label for="reason-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="reason-top" min="0" max="100" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="reason-top-value">50</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="reason-size" class="block text-sm font-medium text-gray-700">Font Size (pt)</label>
+                    <input type="range" id="reason-size" min="10" max="40" value="16" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="reason-size-value">16</span>pt</span>
+                </div>
+                <div class="mb-4">
+                    <label for="reason-font" class="block text-sm font-medium text-gray-700">Font Family</label>
+                    <select id="reason-font" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="Inter">Inter (Sans-Serif)</option>
+                        <option value="Playfair Display">Playfair Display (Serif)</option>
+                        <option value="Times New Roman">Times New Roman (Serif)</option>
+                        <option value="Arial">Arial (Sans-Serif)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                    </select>
+                </div>
+            </details>
+
+            <!-- NEW: Event Name Controls (Re-added) -->
+            <details class="border-t border-gray-200 pt-4 mt-6">
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">Event Name</summary>
+                <div class="mb-4">
+                    <label for="event-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="event-top" min="0" max="100" value="55" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="event-top-value">55</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="event-size" class="block text-sm font-medium text-gray-700">Font Size (pt)</label>
+                    <input type="range" id="event-size" min="12" max="48" value="24" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="event-size-value">24</span>pt</span>
+                </div>
+                <div class="mb-4">
+                    <label for="event-font" class="block text-sm font-medium text-gray-700">Font Family</label>
+                    <select id="event-font" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="Inter">Inter (Sans-Serif)</option>
+                        <option value="Playfair Display">Playfair Display (Serif)</option>
+                        <option value="Times New Roman">Times New Roman (Serif)</option>
+                        <option value="Arial">Arial (Sans-Serif)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                    </select>
+                </div>
+            </details>
+
+            <!-- NEW: Signer Controls (Re-added) -->
+            <details class="border-t border-gray-200 pt-4 mt-6">
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">Signer's Name</summary>
+                <div class="mb-4">
+                    <label for="signer-top" class="block text-sm font-medium text-gray-700">Position (Top %)</label>
+                    <input type="range" id="signer-top" min="0" max="100" value="80" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="signer-top-value">80</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="signer-size" class="block text-sm font-medium text-gray-700">Font Size (pt)</label>
+                    <input type="range" id="signer-size" min="8" max="28" value="14" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="signer-size-value">14</span>pt</span>
+                </div>
+                <div class="mb-4">
+                    <label for="signer-font" class="block text-sm font-medium text-gray-700">Font Family</label>
+                    <select id="signer-font" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="Inter">Inter (Sans-Serif)</option>
+                        <option value="Playfair Display">Playfair Display (Serif)</option>
+                        <option value="Times New Roman">Times New Roman (Serif)</option>
+                        <option value="Arial">Arial (Sans-Serif)</option>
+                        <option value="Courier New">Courier New (Monospace)</option>
+                    </select>
+                </div>
+                <!-- MOVED: Left & Width sliders are now in the correct section -->
+                <div class="mb-4">
+                    <label for="signer-left" class="block text-sm font-medium text-gray-700">Position (Left %)</label>
+                    <input type="range" id="signer-left" min="0" max="100" value="30" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="signer-left-value">30</span>%</span>
+                </div>
+                <div class="mb-4">
+                    <label for="signer-width" class="block text-sm font-medium text-gray-700">Width (%)</label>
+                    <input type="range" id="signer-width" min="10" max="100" value="40" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="signer-width-value">40</span>%</span>
+                </div>
+            </details>
+
+            <!-- General Controls -->
+            <details class="border-t border-gray-200 pt-4 mt-6" open>
+                <summary class="text-lg font-semibold text-gray-700 mb-3 cursor-pointer">General</summary>
+                <div class="mb-4">
+                    <label for="text-opacity" class="block text-sm font-medium text-gray-700">Text Opacity</label>
+                    <input type="range" id="text-opacity" min="0" max="1" value="1" step="0.1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span class="text-sm text-gray-500">Current: <span id="text-opacity-value">1</span></span>
+                </div>
+                
+                <div class="flex items-center">
+                    <input type="checkbox" id="print-background" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="print-background" class="ml-2 block text-sm text-gray-900">Print background image?</label>
+                </div>
+            </details> <!-- CHANGED: Was </div>, fixed typo -->
+
+            <!-- Print Button (Moved inside controls) -->
+            <!-- NEW: Wrapper to center button -->
+            <div class="mt-8 text-center"> 
+                <!-- UPDATED: Removed w-full, changed px-10 to px-6 -->
+                <button id="print-button" class="bg-green-600 text-white p-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 print-hide">
+                    Print All Certificates
+                </button>
+            </div>
+        </div>
+    
+        <!-- == Certificate Preview Area (Now on the right) == -->
+        <div id="certificate-preview-area" class="w-full lg:w-3/5 certificate-container">
+            <!-- 
+              NEW: A single placeholder certificate for alignment preview
+              This will be hidden when the real certificates are generated.
+            -->
+            <div id="placeholder-cert" class="certificate" style="display: none;">
+                <!-- NEW: Placeholder Logo -->
+                <img class="logo-image" data-placeholder="true" style="top: 8%; left: 40%; width: 20%;" src="https://placehold.co/100x100/e2e8f0/a0aec0?text=Logo" alt="Logo Placeholder">
+                
+                <!-- NEW: Placeholder Cert Type -->
+                <div class="text-block cert-type-block" data-placeholder="true" style="top: 25%; font-size: 28pt; font-family: 'Playfair Display';">
+                    [Certificate Type]
+                    <br>
+                    <span style="font-size: 0.7em; font-weight: 500;">Adalah dengan ini diperakui bahawa</span>
+                </div>
+
+                <!-- Default styles added inline to match controls -->
+                <div class="text-block name-block" data-placeholder="true" style="top: 35%; font-size: 48pt; font-family: 'Playfair Display';">
+                    [Participant Name]
+                </div>
+                <div class="text-block ic-block" data-placeholder="true" style="top: 45%; font-size: 18pt; font-family: 'Inter';">
+                    [IC Number]
+                </div>
+                
+                <!-- NEW: Placeholder Reason -->
+                <div class="text-block reason-block" data-placeholder="true" style="top: 50%; font-size: 16pt; font-family: 'Inter';">
+                    [Reason for Certificate]
+                </div>
+                
+                <div class="text-block event-block" data-placeholder="true" style="top: 55%; font-size: 24pt; font-family: 'Inter';">
+                    [Event Name]
+                </div>
+                
+                <!-- UPDATED: Placeholder Signer - Now uses left/width -->
+                <div class="text-block signer-block" data-placeholder="true" style="top: 80%; left: 30%; width: 40%; font-size: 14pt; font-family: 'Inter';">
+                    [Signer's Name]<br>[Signer's Title]
+                </div>
+            </div>
+            
+            <!-- Generated certificates will be inserted here -->
+        </div>
+
+    </div> <!-- End of main-content wrapper -->
+
+    <!-- == Print Button (Old location) == -->
+    <!-- This is now removed, as it's inside the controls card -->
+    <!-- 
+    <button id="print-button" ... >
+        Print All Certificates
+    </button> 
+    -->
+
+    <!-- == Certificate Preview Area (Old location) == -->
+    <!-- This is now inside the main-content wrapper -->
+    <!-- 
+    <div id="certificate-preview-area" class="w-full certificate-container">
+        ...
+    </div>
+    -->
+
+    <script>
+        // === 1. Get DOM Elements ===
+        const certificateForm = document.getElementById('certificate-form');
+        const eventNameInput = document.getElementById('event-name');
+        const csvFileInput = document.getElementById('csv-file');
+        const bgImageInput = document.getElementById('bg-image');
+        // NEW: Get new inputs
+        const certTypeInput = document.getElementById('cert-type');
+        const signerNameInput = document.getElementById('signer-name'); // This now only holds the name
+        const signerTitleInput = document.getElementById('signer-title'); // NEW: Title input
+        const reasonInput = document.getElementById('reason-text'); // NEW
+        const logoImageInput = document.getElementById('logo-image');
+        
+        const messageArea = document.getElementById('message-area');
+        const previewArea = document.getElementById('certificate-preview-area');
+        const printButton = document.getElementById('print-button');
+        
+        // NEW: Main Content Wrapper
+        const mainContent = document.getElementById('main-content');
+        
+        // Control Elements
+        const controlsArea = document.getElementById('controls-area');
+        const nameTopSlider = document.getElementById('name-top');
+        const eventTopSlider = document.getElementById('event-top');
+        const icTopSlider = document.getElementById('ic-top');
+        const textOpacitySlider = document.getElementById('text-opacity');
+        const printBgCheckbox = document.getElementById('print-background');
+        
+        // NEW: Font/Size Control Elements
+        const nameSizeSlider = document.getElementById('name-size');
+        const icSizeSlider = document.getElementById('ic-size');
+        const eventSizeSlider = document.getElementById('event-size');
+        const nameFontSelect = document.getElementById('name-font');
+        const icFontSelect = document.getElementById('ic-font');
+        const eventFontSelect = document.getElementById('event-font');
+        
+        // NEW: Cert Type Controls
+        const certTypeTopSlider = document.getElementById('cert-type-top');
+        const certTypeSizeSlider = document.getElementById('cert-type-size');
+        const certTypeFontSelect = document.getElementById('cert-type-font');
+        
+        // NEW: Reason Controls
+        const reasonTopSlider = document.getElementById('reason-top');
+        const reasonSizeSlider = document.getElementById('reason-size');
+        const reasonFontSelect = document.getElementById('reason-font');
+        
+        // NEW: Signer Controls
+        const signerTopSlider = document.getElementById('signer-top');
+        const signerSizeSlider = document.getElementById('signer-size');
+        const signerFontSelect = document.getElementById('signer-font');
+        const signerLeftSlider = document.getElementById('signer-left'); // NEW
+        const signerWidthSlider = document.getElementById('signer-width'); // NEW
+        
+        // NEW: Logo Controls
+        const logoTopSlider = document.getElementById('logo-top');
+        const logoLeftSlider = document.getElementById('logo-left');
+        const logoSizeSlider = document.getElementById('logo-size');
+        
+        // Control Value Labels
+        const nameTopValue = document.getElementById('name-top-value');
+        const eventTopValue = document.getElementById('event-top-value');
+        const icTopValue = document.getElementById('ic-top-value');
+        const textOpacityValue = document.getElementById('text-opacity-value');
+        
+        // NEW: Font/Size Value Labels
+        const nameSizeValue = document.getElementById('name-size-value');
+        const icSizeValue = document.getElementById('ic-size-value');
+        const eventSizeValue = document.getElementById('event-size-value');
+        
+        // NEW: Value Labels
+        const certTypeTopValue = document.getElementById('cert-type-top-value');
+        const certTypeSizeValue = document.getElementById('cert-type-size-value');
+        const reasonTopValue = document.getElementById('reason-top-value'); // NEW
+        const reasonSizeValue = document.getElementById('reason-size-value'); // NEW
+        const signerTopValue = document.getElementById('signer-top-value');
+        const signerSizeValue = document.getElementById('signer-size-value');
+        const signerLeftValue = document.getElementById('signer-left-value'); // NEW
+        const signerWidthValue = document.getElementById('signer-width-value'); // NEW
+        const logoTopValue = document.getElementById('logo-top-value');
+        const logoLeftValue = document.getElementById('logo-left-value');
+        const logoSizeValue = document.getElementById('logo-size-value');
+
+        // Placeholder Certificate
+        const placeholderCert = document.getElementById('placeholder-cert');
+        
+        // === 2. Global State ===
+        let backgroundImageURL = '';
+        let logoImageURL = ''; // NEW
+
+        // === 3. Event Listeners ===
+
+        // Handle Background Image Upload
+        bgImageInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    backgroundImageURL = e.target.result;
+                    
+                    // UPDATED: Apply to all existing certificate elements (placeholder + generated)
+                    document.querySelectorAll('#certificate-preview-area .certificate').forEach(cert => {
+                        cert.style.backgroundImage = `url(${backgroundImageURL})`;
+                    });
+
+                    // Show the placeholder cert for alignment
+                    placeholderCert.style.display = 'block';
+                    // Show controls + preview wrapper
+                    mainContent.style.display = 'flex';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                backgroundImageURL = '';
+                
+                // UPDATED: Remove from all existing certificate elements
+                document.querySelectorAll('#certificate-preview-area .certificate').forEach(cert => {
+                    cert.style.backgroundImage = 'none';
+                });
+
+                placeholderCert.style.display = 'none';
+            }
+        });
+        
+        // NEW: Handle Logo Image Upload
+        logoImageInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    logoImageURL = e.target.result;
+                    // Update all logo images (placeholder and generated)
+                    document.querySelectorAll('.logo-image').forEach(img => {
+                        img.src = logoImageURL;
+                        img.style.display = 'block';
+                    });
+                };
+                reader.readAsDataURL(file);
+            } else {
+                logoImageURL = '';
+                document.querySelectorAll('.logo-image').forEach(img => {
+                    img.style.display = 'none';
+                });
+            }
+        });
+
+        // Handle Form Submission
+        certificateForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent default form submission
+            
+            const eventName = eventNameInput.value.trim();
+            // NEW: Get new form values
+            const certType = certTypeInput.value.trim();
+            const signerName = signerNameInput.value.trim();
+            const signerTitle = signerTitleInput.value.trim(); // NEW
+            const reasonText = reasonInput.value.trim(); // NEW
+            
+            const csvFile = csvFileInput.files[0];
+            
+            // Clear previous messages and previews
+            showMessage('', 'clear');
+            previewArea.innerHTML = ''; // Clear out old certs
+            printButton.style.display = 'none';
+            
+            // --- 1. Validate Inputs ---
+            if (!eventName) {
+                showMessage('Please enter an event name.', 'error');
+                return;
+            }
+            if (!csvFile) {
+                showMessage('Please select a CSV file.', 'error');
+                return;
+            }
+            
+            // --- 2. Read and Parse CSV File ---
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const csvData = e.target.result;
+                const lines = csvData.split('\n');
+                // NEW: Change 'names' to 'participants'
+                const participants = [];
+                
+                // Start from i = 1 to skip the header row
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line) {
+                        const columns = line.split(',');
+                        // Get name (col 0) and ic (col 1)
+                        const name = columns[0] ? columns[0].replace(/"/g, '').trim() : '';
+                        const ic = columns[1] ? columns[1].replace(/"/g, '').trim() : '';
+                        
+                        if (name) { // Only add if a name is present
+                            participants.push({ name: name, ic: ic });
+                        }
+                    }
+                }
+                
+                if (participants.length === 0) {
+                    showMessage('No names found in the CSV file. Please check the file format.', 'error');
+                    return;
+                }
+                
+                // --- 3. Generate Certificates ---
+                // NEW: Pass new values
+                generateCertificateHTML(participants, eventName, certType, signerName, signerTitle, reasonText);
+                
+                // --- 4. Show Success Message and Controls ---
+                showMessage(`Successfully generated ${participants.length} certificates.`, 'success');
+                printButton.style.display = 'block';
+                mainContent.style.display = 'flex'; // Show controls + preview wrapper
+                placeholderCert.style.display = 'none'; // Hide placeholder
+            };
+            
+            reader.onerror = function() {
+                showMessage('Error reading the file.', 'error');
+            };
+            
+            reader.readAsText(csvFile);
+        });
+        
+        // --- NEW: Live Alignment Controls ---
+
+        // Name Position Slider
+        nameTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            nameTopValue.textContent = value;
+            // Update all generated certificates
+            document.querySelectorAll('.name-block').forEach(el => {
+                el.style.top = `${value}%`;
+            });
+        });
+
+        // NEW: Event Name Position Slider (Re-added)
+        eventTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            eventTopValue.textContent = value;
+            document.querySelectorAll('.event-block').forEach(el => {
+                el.style.top = `${value}%`;
+            });
+        });
+        
+        // NEW: IC Number Position Slider (Re-added)
+        icTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            icTopValue.textContent = value;
+            document.querySelectorAll('.ic-block').forEach(el => {
+                el.style.top = `${value}%`;
+            });
+        });
+        
+        // Text Opacity Slider
+        textOpacitySlider.addEventListener('input', function() {
+            const value = this.value;
+            textOpacityValue.textContent = value;
+            document.querySelectorAll('.text-block').forEach(el => {
+                // Don't apply to placeholder elements
+                if (!el.hasAttribute('data-placeholder')) {
+                    el.style.opacity = value;
+                }
+            });
+            // Also apply to placeholder text blocks
+            document.querySelectorAll('#placeholder-cert .text-block').forEach(el => {
+                el.style.opacity = value;
+            });
+        });
+        
+        // --- NEW: Font/Size Controls (Re-added) ---
+        
+        // Name
+        nameSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            nameSizeValue.textContent = value;
+            document.querySelectorAll('.name-block').forEach(el => {
+                el.style.fontSize = `${value}pt`;
+            });
+        });
+        nameFontSelect.addEventListener('change', function() {
+            document.querySelectorAll('.name-block').forEach(el => {
+                el.style.fontFamily = this.value;
+            });
+        });
+        
+        // IC Number
+        icSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            icSizeValue.textContent = value;
+            document.querySelectorAll('.ic-block').forEach(el => {
+                el.style.fontSize = `${value}pt`;
+            });
+        });
+        icFontSelect.addEventListener('change', function() {
+            document.querySelectorAll('.ic-block').forEach(el => {
+                el.style.fontFamily = this.value;
+            });
+        });
+        
+        // Event Name
+        eventSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            eventSizeValue.textContent = value;
+            document.querySelectorAll('.event-block').forEach(el => {
+                el.style.fontSize = `${value}pt`;
+            });
+        });
+        eventFontSelect.addEventListener('change', function() {
+            document.querySelectorAll('.event-block').forEach(el => {
+                el.style.fontFamily = this.value;
+            });
+        });
+        
+        // --- NEW: Certificate Type Controls ---
+        certTypeTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            certTypeTopValue.textContent = value;
+            document.querySelectorAll('.cert-type-block').forEach(el => {
+                el.style.top = `${value}%`;
+            });
+        });
+        certTypeSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            certTypeSizeValue.textContent = value;
+            document.querySelectorAll('.cert-type-block').forEach(el => {
+                el.style.fontSize = `${value}pt`;
+            });
+        });
+        certTypeFontSelect.addEventListener('change', function() {
+            document.querySelectorAll('.cert-type-block').forEach(el => {
+                el.style.fontFamily = this.value;
+            });
+        });
+        
+        // --- NEW: Reason Controls ---
+        reasonTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            reasonTopValue.textContent = value;
+            document.querySelectorAll('.reason-block').forEach(el => {
+                el.style.top = `${value}%`;
+            });
+        });
+        reasonSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            reasonSizeValue.textContent = value;
+            document.querySelectorAll('.reason-block').forEach(el => {
+                el.style.fontSize = `${value}pt`;
+            });
+        });
+        reasonFontSelect.addEventListener('change', function() {
+            document.querySelectorAll('.reason-block').forEach(el => {
+                el.style.fontFamily = this.value;
+            });
+        });
+        
+        // --- NEW: Signer Controls ---
+        signerTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            signerTopValue.textContent = value;
+            document.querySelectorAll('.signer-block').forEach(el => {
+                el.style.top = `${value}%`;
+            });
+        });
+        signerSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            signerSizeValue.textContent = value;
+            document.querySelectorAll('.signer-block').forEach(el => {
+                el.style.fontSize = `${value}pt`;
+            });
+        });
+        signerFontSelect.addEventListener('change', function() {
+            document.querySelectorAll('.signer-block').forEach(el => {
+                el.style.fontFamily = this.value;
+            });
+        });
+
+        // REMOVED: Signer Alignment listener
+        /*
+        signerAlignSelect.addEventListener('change', function() {
+            ...
+        });
+        */
+        
+        // NEW: Signer Left Slider
+        signerLeftSlider.addEventListener('input', function() {
+            const value = this.value;
+            signerLeftValue.textContent = value;
+            document.querySelectorAll('.signer-block').forEach(el => {
+                el.style.left = `${value}%`;
+            });
+        });
+        
+        // NEW: Signer Width Slider
+        signerWidthSlider.addEventListener('input', function() {
+            const value = this.value;
+            signerWidthValue.textContent = value;
+            document.querySelectorAll('.signer-block').forEach(el => {
+                el.style.width = `${value}%`;
+            });
+        });
+        
+        // --- NEW: Logo Controls ---
+        logoTopSlider.addEventListener('input', function() {
+            const value = this.value;
+            logoTopValue.textContent = value;
+            document.querySelectorAll('.logo-image').forEach(img => {
+                img.style.top = `${value}%`;
+            });
+        });
+        logoLeftSlider.addEventListener('input', function() {
+            const value = this.value;
+            logoLeftValue.textContent = value;
+            document.querySelectorAll('.logo-image').forEach(img => {
+                img.style.left = `${value}%`;
+            });
+        });
+        logoSizeSlider.addEventListener('input', function() {
+            const value = this.value;
+            logoSizeValue.textContent = value;
+            document.querySelectorAll('.logo-image').forEach(img => {
+                img.style.width = `${value}%`;
+            });
+        });
+
+        // === 4. Helper Functions ===
+
+        /**
+         * Generates the HTML for all certificates and inserts them into the preview area.
+         */
+         // NEW: Parameter changed
+        function generateCertificateHTML(participants, eventName, certType, signerName, signerTitle, reasonText) {
+            let allCertificatesHTML = '';
+            
+            // Get current alignment values
+            const nameTop = nameTopSlider.value;
+            const icTop = icTopSlider.value;
+            const eventTop = eventTopSlider.value;
+            const opacity = textOpacitySlider.value;
+            
+            // NEW: Get current font/size values
+            const nameSize = nameSizeSlider.value + 'pt';
+            const icSize = icSizeSlider.value + 'pt';
+            const eventSize = eventSizeSlider.value + 'pt';
+            const nameFont = nameFontSelect.value;
+            const icFont = icFontSelect.value;
+            const eventFont = eventFontSelect.value;
+            
+            // NEW: Get Reason values
+            const reasonTop = reasonTopSlider.value;
+            const reasonSize = reasonSizeSlider.value + 'pt';
+            const reasonFont = reasonFontSelect.value;
+            
+            // NEW: Get Cert Type values
+            const certTypeTop = certTypeTopSlider.value;
+            const certTypeSize = certTypeSizeSlider.value + 'pt';
+            const certTypeFont = certTypeFontSelect.value;
+            
+            // NEW: Get Signer values
+            const signerTop = signerTopSlider.value;
+            const signerSize = signerSizeSlider.value + 'pt';
+            const signerFont = signerFontSelect.value;
+            const signerLeft = signerLeftSlider.value + '%'; // NEW
+            const signerWidth = signerWidthSlider.value + '%'; // NEW
+            
+            // NEW: Get Logo values
+            const logoTop = logoTopSlider.value + '%'; // CHANGED: Added '%'
+            const logoLeft = logoLeftSlider.value + '%'; // CHANGED: Added '%'
+            const logoSize = logoSizeSlider.value + '%';
+            
+            // NEW: Create safe HTML strings
+            const safeCertType = escapeHTML(certType);
+            const safeReasonText = escapeHTML(reasonText).replace(/\n/g, '<br>'); // NEW: Support multi-line
+            const safeSignerName = escapeHTML(signerName);
+            const safeSignerTitle = escapeHTML(signerTitle); // NEW
+            
+            // REMOVED: Get alignment class
+            // const signerAlignClass = ...
+
+            // NEW: Loop through participants array
+            for (const participant of participants) {
+                const safeName = escapeHTML(participant.name);
+                // NEW
+                const safeIC = escapeHTML(participant.ic);
+                const safeEventName = escapeHTML(eventName);
+
+                allCertificatesHTML += `
+                <!-- This is one A4 certificate -->
+                <div class="certificate" style="background-image: url('${backgroundImageURL}');">
+                
+                    <!-- NEW: Add Logo Image -->
+                    ${logoImageURL ? `
+                    <img class="logo-image" src="${logoImageURL}" style="top: ${logoTop}; left: ${logoLeft}; width: ${logoSize};">
+                    ` : ''}
+                
+                    <!-- UPDATED: Positioned Certificate Type -->
+                    ${safeCertType ? `
+                    <div class="text-block cert-type-block" style="top: ${certTypeTop}%; opacity: ${opacity}; font-size: ${certTypeSize}; font-family: '${certTypeFont}';">
+                        ${safeCertType}
+                        <br>
+                        <span style="font-size: 0.7em; font-weight: 500;">Adalah dengan ini diperakui bahawa</span>
+                    </div>
+                    ` : ''}
+
+                    <!-- Positioned Name -->
+                    <div class="text-block name-block" style="top: ${nameTop}%; opacity: ${opacity}; font-size: ${nameSize}; font-family: '${nameFont}';">
+                        ${safeName}
+                    </div>
+                    
+                    <!-- NEW: Positioned IC Number -->
+                    <div class="text-block ic-block" style="top: ${icTop}%; opacity: ${opacity}; font-size: ${icSize}; font-family: '${icFont}';">
+                        ${safeIC}
+                    </div>
+
+                    <!-- NEW: Positioned Reason -->
+                    ${safeReasonText ? `
+                    <div class="text-block reason-block" style="top: ${reasonTop}%; opacity: ${opacity}; font-size: ${reasonSize}; font-family: '${reasonFont}';">
+                        ${safeReasonText}
+                    </div>
+                    ` : ''}
+
+                    <!-- Positioned Event Name -->
+                    <div class="text-block event-block" style="top: ${eventTop}%; opacity: ${opacity}; font-size: ${eventSize}; font-family: '${eventFont}';">
+                        ${safeEventName}
+                    </div>
+                    
+                    <!-- UPDATED: Positioned Signer - Now uses inline left/width -->
+                    ${safeSignerName || safeSignerTitle ? `
+                    <div class="text-block signer-block" style="top: ${signerTop}%; left: ${signerLeft}; width: ${signerWidth}; opacity: ${opacity}; font-size: ${signerSize}; font-family: '${signerFont}';">
+                        ${safeSignerName}
+                        ${safeSignerName && safeSignerTitle ? '<br>' : ''}
+                        ${safeSignerTitle}
+                    </div>
+                    ` : ''}
+                </div>
+                `;
+            }
+            
+            // Re-add the placeholder cert at the beginning (it will be hidden)
+            previewArea.innerHTML = placeholderCert.outerHTML + allCertificatesHTML;
+            // Re-select the placeholder cert from the DOM
+            const newPlaceholder = document.getElementById('placeholder-cert');
+            if (newPlaceholder) {
+                newPlaceholder.style.display = 'none'; // Ensure it stays hidden
+            }
+        }
+
+        /**
+         * Displays a message to the user.
+         */
+        function showMessage(message, type) {
+            messageArea.textContent = message;
+            messageArea.className = type === 'success' ? 'p-3 rounded-lg text-center bg-green-100 text-green-700' :
+                                    type === 'error'   ? 'p-3 rounded-lg text-center bg-red-100 text-red-700' :
+                                    '';
+        }
+        
+        /**
+         * Helper function to escape HTML special characters.
+         */
+        function escapeHTML(str) {
+            return str.replace(/[&<>"']/g, function(m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[m];
+            });
+        }
+    </script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
