@@ -720,6 +720,23 @@
             reader.readAsText(csvFile);
         });
         
+        // NEW: Handle Print Button Click
+        printButton.addEventListener('click', function() {
+            // Check if we should print the background
+            if (printBgCheckbox.checked) {
+                document.body.classList.add('printing-with-bg');
+            }
+            
+            // Trigger the browser's print dialog
+            window.print();
+            
+            // Clean up the class after printing
+            // Note: This runs immediately, but the class is only used during @print
+            if (printBgCheckbox.checked) {
+                document.body.classList.remove('printing-with-bg');
+            }
+        });
+
         // --- NEW: Live Alignment Controls ---
 
         // Name Position Slider
@@ -1071,6 +1088,7 @@
 
 </body>
 </html>
+
 
 
 
