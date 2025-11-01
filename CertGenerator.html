@@ -121,6 +121,8 @@
             body {
                 padding: 0;
                 margin: 0;
+                /* FIX: Force a white background for printing to hide the app's grey bg */
+                background-color: #ffffff !important;
             }
             
             /* NEW: Ensure preview area is visible and certificates are the only content */
@@ -135,6 +137,8 @@
                 width: 100% !important;
                 margin: 0;
                 padding: 0;
+                /* FIX: Remove the on-screen gap during printing */
+                gap: 0;
             }
 
             /* Hide all non-certificate elements */
@@ -1114,6 +1118,8 @@
 
 </body>
 </html>
+
+
 
 
 
