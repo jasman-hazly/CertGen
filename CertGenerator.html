@@ -112,6 +112,31 @@
         }
         
         @media print {
+            /* NEW: Hide elements with the 'print-hide' class */
+            .print-hide {
+                display: none !important;
+            }
+            
+            /* NEW: Reset body for printing */
+            body {
+                padding: 0;
+                margin: 0;
+            }
+            
+            /* NEW: Ensure preview area is visible and certificates are the only content */
+            #main-content {
+                display: block !important;
+                margin: 0;
+                padding: 0;
+            }
+            
+            #certificate-preview-area {
+                display: block !important;
+                width: 100% !important;
+                margin: 0;
+                padding: 0;
+            }
+
             /* Hide all non-certificate elements */
             .certificate {
                 width: 210mm;
@@ -1089,6 +1114,7 @@
 
 </body>
 </html>
+
 
 
 
